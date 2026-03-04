@@ -1,0 +1,18 @@
+FROM python:3.14-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y libpq-dev gcc && rm -rf /var/lib/apt/lists/*
+
+COPY /requirements/requirements-etl.txt .
+RUN pip install --no-cache-dir -r requirements-etl.txt
+
+COPY etl_script.py .
+
+RUN useradd -m appuser
+USER appuser
+
+CMD ["python", "etl_script.py"]

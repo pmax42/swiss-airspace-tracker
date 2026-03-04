@@ -1,0 +1,7 @@
+maximepetre.com {
+    reverse_proxy dashboard:8501
+}
+
+www.maximepetre.com {
+    reverse_proxy dashboard:8501
+}

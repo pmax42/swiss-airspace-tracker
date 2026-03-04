@@ -1,0 +1,54 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main 
+
+jobs:
+  test:
+    name: Run Linter and Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pandas requests sqlalchemy psycopg2 ruff httpx fastapi
+
+      - name: Lint code with Ruff
+        run: |
+          ruff check . --select=E9,F63,F7,F82 --output-format=github
+          ruff check . --exit-zero
+
+      - name: Run tests with Pytest
+        run: |
+          pytest tests/ -v
+
+  deploy:
+    name: Deploy to AWS Lightsail
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: SSH connection and Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/swiss-airspace-tracker
+            
+            git pull origin main
+            
+            docker-compose down
+            docker-compose up -d --build

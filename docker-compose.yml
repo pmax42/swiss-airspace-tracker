@@ -1,0 +1,94 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: swiss_airspace_db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  etl:
+    build:
+      context: .
+      dockerfile: Dockerfile.etl
+    container_name: swiss_airspace_etl
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+      - OPENSKY_CLIENT_ID=${OPENSKY_CLIENT_ID}
+      - OPENSKY_CLIENT_SECRET=${OPENSKY_CLIENT_SECRET}
+      - PROXY_HOST=${PROXY_HOST}
+      - PROXY_PORT=${PROXY_PORT}
+      - PROXY_USER=${PROXY_USER}
+      - PROXY_PASS=${PROXY_PASS}
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: swiss_airspace_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_NAME=${DB_NAME}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/flights/latest"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: swiss_airspace_dashboard
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      - API_HOST=${API_HOST}
+      - STREAMLIT_UI_HIDE_TOP_BAR=${STREAMLIT_UI_HIDE_TOP_BAR}
+      - STREAMLIT_CLIENT_TOOLBAR_MODE=${STREAMLIT_CLIENT_TOOLBAR_MODE}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  caddy:
+    image: caddy:2
+    container_name: caddy_proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      dashboard:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
